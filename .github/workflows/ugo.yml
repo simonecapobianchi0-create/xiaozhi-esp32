@@ -34,3 +34,9 @@ jobs:
         run: |
           source "$IDF_PATH/export.sh"
           python scripts/build.py otto-robot
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: ugo-otto-2.5.0-pdm
+          path: src/build/merged-binary.bin
+          if-no-files-found: error
