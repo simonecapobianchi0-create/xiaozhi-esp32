@@ -1,0 +1,42 @@
+name: Ugo firmware PDM
+on:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: espressif/idf:release-v6.1
+    steps:
+      - name: Get xiaozhi v2.5.0
+        run: git clone --depth 1 --branch v2.5.0 https://github.com/78/xiaozhi-esp32.git src
+      - name: Apply PDM microphone fix
+        working-directory: src
+        run: |
+          grep -n "NoAudioCodecSimplexPdm" -r main/audio | head
+          python3 - <<'PY'
+          import re
+          p='main/boards/otto-robot/config.h'
+          s=open(p).read()
+          s,n=re.subn(r'\.audio_i2s_mic_gpio_ws\s*=\s*GPIO_NUM_4,','.audio_i2s_mic_gpio_ws = GPIO_NUM_NC,',s)
+          print('config.h replacements',n); assert n>=1
+          open(p,'w').write(s)
+          p='main/boards/otto-robot/otto_robot.cc'
+          s=open(p).read()
+          s,n1=re.subn(r'new NoAudioCodecSimplex\(','new NoAudioCodecSimplexPdm(',s)
+          s,n2=re.subn(r'hw_config_\.audio_i2s_mic_gpio_ws,\s*','',s)
+          print('cc replacements',n1,n2); assert n1==1 and n2==1
+          open(p,'w').write(s)
+          PY
+          git diff
+      - name: Build
+        working-directory: src
+        shell: bash
+        run: |
+          source "$IDF_PATH/export.sh"
+          python scripts/build.py otto-robot
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: ugo-otto-2.5.0-pdm
+          path: src/build/merged-binary.bin
+          if-no-files-found: error
