@@ -28,6 +28,20 @@ jobs:
           open(p,'w').write(s)
           PY
           git diff
+      - name: Apply display fix
+        working-directory: src
+        run: |
+          python3 - <<'PY'
+          import re
+          p='main/boards/otto-robot/otto_robot.cc'
+          s=open(p).read()
+          assert 'io_config.pclk_hz = 40 * 1000 * 1000;' in s
+          s=s.replace('io_config.pclk_hz = 40 * 1000 * 1000;','io_config.pclk_hz = 20 * 1000 * 1000;')
+          s,n=re.subn(r'esp_lcd_panel_reset\(panel\);','vTaskDelay(pdMS_TO_TICKS(300));\n    esp_lcd_panel_reset(panel);\n    vTaskDelay(pdMS_TO_TICKS(150));\n    esp_lcd_panel_reset(panel);\n    vTaskDelay(pdMS_TO_TICKS(150));',s,count=1)
+          print('reset replacements',n); assert n==1
+          open(p,'w').write(s)
+          PY
+          git diff main/boards/otto-robot/otto_robot.cc
       - name: Build
         working-directory: src
         shell: bash
@@ -37,6 +51,6 @@ jobs:
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: ugo-otto-2.5.0-pdm
+          name: ugo-otto-2.5.0-lcd
           path: src/build/merged-binary.bin
           if-no-files-found: error
