@@ -120,6 +120,23 @@ bool CustomWakeWord::Initialize(AudioCodec* codec, srmodel_list_t* models_list) 
     multinet_ = esp_mn_handle_from_name(mn_name_);
     multinet_model_data_ = multinet_->create(mn_name_, duration_);
     multinet_->set_det_threshold(multinet_model_data_, threshold_);
+    // Ugo: una parola di attivazione può avere più varianti separate da ';'
+    {
+        std::deque<Command> expanded;
+        for (auto& c : commands_) {
+            size_t start = 0;
+            while (start <= c.command.size()) {
+                size_t end = c.command.find(';', start);
+                std::string part = c.command.substr(start, end == std::string::npos ? std::string::npos : end - start);
+                while (!part.empty() && part.front() == ' ') part.erase(0, 1);
+                while (!part.empty() && part.back() == ' ') part.pop_back();
+                if (!part.empty()) expanded.push_back({part, c.text, c.action});
+                if (end == std::string::npos) break;
+                start = end + 1;
+            }
+        }
+        commands_ = expanded;
+    }
     esp_mn_commands_clear();
     for (int i = 0; i < commands_.size(); i++) {
         esp_mn_commands_add(i + 1, commands_[i].command.c_str());
