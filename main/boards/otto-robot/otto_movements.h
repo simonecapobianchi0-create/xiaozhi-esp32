@@ -90,7 +90,9 @@ public:
     void Shy(int dir = LEFT, float steps = 5);  // 害羞
     void RadioCalisthenics();  // 广播体操
     void MagicCircle();  // 爱的魔力转圈圈
-    void Showcase();  // 展示动作（串联多个动作）
+    void Showcase();
+    // Ugo: gesti espressivi sul posto (id 1-12, intensity 0-100). Non camminano.
+    void Gesture(int id, int intensity);  // 展示动作（串联多个动作）
 
     // -- Servo limiter
     void EnableServoLimit(int speed_limit_degree_per_sec = SERVO_LIMIT_DEFAULT);

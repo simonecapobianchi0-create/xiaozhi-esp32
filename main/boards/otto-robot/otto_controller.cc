@@ -2,6 +2,9 @@
     Otto机器人控制器 - MCP协议版本
 */
 
+#include <esp_random.h>
+#include <esp_timer.h>
+#include <string>
 #include <cJSON.h>
 #include <esp_log.h>
 
@@ -65,7 +68,8 @@ private:
         ACTION_SHOWCASE = 28,   // 展示动作
         ACTION_HOME = 17,
         ACTION_SERVO_SEQUENCE = 18,  // 舵机序列（自编程）
-        ACTION_WHIRLWIND_LEG = 19    // 旋风腿
+        ACTION_WHIRLWIND_LEG = 19,   // 旋风腿
+        ACTION_GESTURE = 40          // Ugo: gesto espressivo sul posto
     };
 
     static void ActionTask(void* arg) {
@@ -400,6 +404,9 @@ private:
                                 controller->otto_.Shy(params.direction, params.steps);
                             }
                             break;
+                        case ACTION_GESTURE:
+                            controller->otto_.Gesture(params.direction, params.amount);
+                            break;
                         case ACTION_HOME:
                             controller->otto_.Home(true);
                             break;
@@ -492,6 +499,80 @@ private:
         otto_.SetTrims(left_leg, right_leg, left_foot, right_foot, left_hand, right_hand);
     }
 
+    // ===== Ugo: linguaggio del corpo durante la conversazione =====
+    bool bl_enabled_ = true;
+    int bl_intensity_ = 70;
+    bool bl_speaking_ = false;
+    std::string bl_emotion_ = "neutral";
+    int64_t bl_last_ms_ = 0;
+
+    static int64_t NowMs() { return esp_timer_get_time() / 1000; }
+    bool Busy() {
+        return is_action_in_progress_ || uxQueueMessagesWaiting(action_queue_) > 0;
+    }
+    static int Pick(const int* pool, int n) { return pool[esp_random() % n]; }
+    int GestureForEmotion(const std::string& e) {
+        static const int neutral[] = {1, 2, 4, 5, 12, 3, 1, 2};
+        static const int happy[]   = {6, 3, 1, 2, 4, 6};
+        static const int sad[]     = {9, 5};
+        static const int angry[]   = {11, 1, 2};
+        static const int surpr[]   = {7, 3};
+        static const int think[]   = {10, 12, 5, 8};
+        auto in = [&](std::initializer_list<const char*> l) {
+            for (auto x : l) if (e == x) return true;
+            return false;
+        };
+        if (in({"happy", "laughing", "funny", "loving", "confident", "cool", "winking", "silly", "delicious", "kissy"}))
+            return Pick(happy, sizeof(happy) / sizeof(int));
+        if (in({"sad", "crying"})) return Pick(sad, sizeof(sad) / sizeof(int));
+        if (in({"angry", "anger"})) return Pick(angry, sizeof(angry) / sizeof(int));
+        if (in({"surprised", "shocked", "scare"})) return Pick(surpr, sizeof(surpr) / sizeof(int));
+        if (in({"thinking", "confused", "embarrassed", "buxue"})) return Pick(think, sizeof(think) / sizeof(int));
+        return Pick(neutral, sizeof(neutral) / sizeof(int));
+    }
+    // Accoda un gesto solo se il robot è libero: non interrompe mai le azioni chieste a voce.
+    bool TryGesture(int id, int percent_chance, int min_gap_ms) {
+        if (!bl_enabled_ || Busy()) return false;
+        if ((int)(esp_random() % 100) >= percent_chance) return false;
+        int64_t now = NowMs();
+        if (now - bl_last_ms_ < min_gap_ms) return false;
+        OttoActionParams params = {ACTION_GESTURE, 1, 0, id, bl_intensity_, ""};
+        if (xQueueSend(action_queue_, &params, 0) != pdTRUE) return false;
+        StartActionTaskIfNeeded();
+        bl_last_ms_ = now;
+        return true;
+    }
+
+public:
+    enum BodyEvent { BODY_SPEAK_START = 1, BODY_SENTENCE = 2, BODY_SPEAK_END = 3, BODY_EMOTION = 4 };
+    void OnBodyEvent(int ev, const char* arg) {
+        switch (ev) {
+            case BODY_SPEAK_START:
+                bl_speaking_ = true;
+                TryGesture(GestureForEmotion(bl_emotion_), 85, 0);   // prima di parlare
+                break;
+            case BODY_SENTENCE:
+                if (bl_speaking_) TryGesture(GestureForEmotion(bl_emotion_), 65, 900);  // durante
+                break;
+            case BODY_SPEAK_END:
+                if (bl_speaking_) {
+                    bl_speaking_ = false;
+                    static const int closing[] = {4, 12, 5};
+                    TryGesture(Pick(closing, 3), 55, 600);        // dopo aver parlato
+                }
+                bl_emotion_ = "neutral";
+                break;
+            case BODY_EMOTION:
+                if (arg) {
+                    std::string e(arg);
+                    bool changed = (e != bl_emotion_);
+                    bl_emotion_ = e;
+                    if (bl_speaking_ && changed && e != "neutral") TryGesture(GestureForEmotion(e), 90, 400);
+                }
+                break;
+        }
+    }
+
 public:
     OttoController(const HardwareConfig& hw_config) {
         otto_.Init(
@@ -505,6 +586,11 @@ public:
 
         has_hands_ = (hw_config.left_hand_pin != GPIO_NUM_NC && hw_config.right_hand_pin != GPIO_NUM_NC);
         ESP_LOGI(TAG, "Otto机器人初始化%s手部舵机", has_hands_ ? "带" : "不带");
+        {
+            Settings bl("ugo_body", false);
+            bl_enabled_ = bl.GetInt("enabled", 1) != 0;
+            bl_intensity_ = bl.GetInt("intensity", 70);
+        }
         ESP_LOGI(TAG, "舵机引脚配置: LL=%d, RL=%d, LF=%d, RF=%d, LH=%d, RH=%d",
                  hw_config.left_leg_pin, hw_config.right_leg_pin,
                  hw_config.left_foot_pin, hw_config.right_foot_pin,
@@ -700,6 +786,22 @@ public:
             });
 
 
+        mcp_server.AddTool("self.otto.body_language",
+                           "Ugo: attiva o disattiva i gesti automatici mentre parla (linguaggio del corpo) e ne regola l'intensità. "
+                           "Usalo quando l'utente chiede di stare fermo, di muoversi di più o di meno. enabled: true/false; intensity: 10-100",
+                           PropertyList({
+                               Property("enabled", kPropertyTypeBoolean, true),
+                               Property("intensity", kPropertyTypeInteger, 70, 10, 100)
+                           }),
+                           [this](const PropertyList& properties) -> ReturnValue {
+                               bl_enabled_ = properties["enabled"].value<bool>();
+                               bl_intensity_ = properties["intensity"].value<int>();
+                               Settings bl("ugo_body", true);
+                               bl.SetInt("enabled", bl_enabled_ ? 1 : 0);
+                               bl.SetInt("intensity", bl_intensity_);
+                               return true;
+                           });
+
         mcp_server.AddTool("self.otto.stop", "立即停止所有动作并复位", PropertyList(),
                            [this](const PropertyList& properties) -> ReturnValue {
                                if (action_task_handle_ != nullptr) {
@@ -845,5 +947,13 @@ void InitializeOttoController(const HardwareConfig& hw_config) {
     if (g_otto_controller == nullptr) {
         g_otto_controller = new OttoController(hw_config);
         ESP_LOGI(TAG, "Otto控制器已初始化并注册MCP工具");
+    }
+}
+
+
+// Ugo: eventi di conversazione dal display al linguaggio del corpo
+void OttoBodyEvent(int ev, const char* arg) {
+    if (g_otto_controller != nullptr) {
+        g_otto_controller->OnBodyEvent(ev, arg);
     }
 }
