@@ -1,3 +1,4 @@
+#include <esp_random.h>
 #include "otto_movements.h"
 
 #include <algorithm>
@@ -960,5 +961,104 @@ void Otto::DisableServoLimit() {
         if (servo_pins_[i] != -1) {
             servo_[i].DisableLimiter();
         }
+    }
+}
+
+
+//---------------------------------------------------------
+//-- Ugo: gesti espressivi sul posto, piccole ampiezze, nessun passo
+//--   id: 1 spiega con la destra, 2 spiega con la sinistra, 3 apre le braccia,
+//--       4 annuisce (punte), 5 inclina, 6 dondola felice, 7 sorpresa,
+//--       8 timido, 9 triste, 10 pensieroso, 11 agitato, 12 alza le spalle
+//--   intensity: 0-100
+//---------------------------------------------------------
+void Otto::Gesture(int id, int intensity) {
+    if (intensity < 10) intensity = 10;
+    if (intensity > 100) intensity = 100;
+    const float k = intensity / 100.0f;
+    const int LH0 = HAND_HOME_POSITION, RH0 = 180 - HAND_HOME_POSITION;
+    int t[SERVO_COUNT];
+    auto base = [&]() {
+        t[LEFT_LEG] = 90; t[RIGHT_LEG] = 90; t[LEFT_FOOT] = 90; t[RIGHT_FOOT] = 90;
+        t[LEFT_HAND] = LH0; t[RIGHT_HAND] = RH0;
+    };
+    auto L = [&](int up) { return LH0 + (int)(up * k); };   // alza mano sinistra
+    auto R = [&](int up) { return RH0 - (int)(up * k); };   // alza mano destra
+    auto F = [&](int d) { return (int)(d * k); };
+    const bool hands = has_hands_;
+
+    switch (id) {
+        case 1:  // spiega con la destra
+        case 2: {  // spiega con la sinistra
+            if (!hands) { base(); t[LEFT_FOOT] = 90 + F(8); t[RIGHT_FOOT] = 90 + F(8); MoveServos(300, t); break; }
+            bool right = (id == 1);
+            base(); if (right) t[RIGHT_HAND] = R(70); else t[LEFT_HAND] = L(70);
+            MoveServos(320, t);
+            if (right) t[RIGHT_HAND] = R(40); else t[LEFT_HAND] = L(40);
+            MoveServos(220, t);
+            if (right) t[RIGHT_HAND] = R(60); else t[LEFT_HAND] = L(60);
+            MoveServos(220, t);
+            vTaskDelay(pdMS_TO_TICKS(120));
+            break;
+        }
+        case 3:  // apre le braccia
+            base(); if (hands) { t[LEFT_HAND] = L(75); t[RIGHT_HAND] = R(75); }
+            t[LEFT_FOOT] = 90 + F(6); t[RIGHT_FOOT] = 90 - F(6);
+            MoveServos(380, t); vTaskDelay(pdMS_TO_TICKS(250));
+            break;
+        case 4:  // annuisce: due piccoli sollevamenti sulle punte
+            for (int i = 0; i < 2; i++) {
+                base(); t[LEFT_FOOT] = 90 + F(12); t[RIGHT_FOOT] = 90 - F(12); MoveServos(200, t);
+                base(); MoveServos(200, t);
+            }
+            break;
+        case 5: {  // inclina il corpo da un lato
+            int d = (esp_random() & 1) ? 1 : -1;
+            base(); t[LEFT_FOOT] = 90 + d * F(12); t[RIGHT_FOOT] = 90 + d * F(12);
+            if (hands) { if (d > 0) t[LEFT_HAND] = L(20); else t[RIGHT_HAND] = R(20); }
+            MoveServos(350, t); vTaskDelay(pdMS_TO_TICKS(450));
+            break;
+        }
+        case 6:  // dondola felice
+            for (int i = 0; i < 2; i++) {
+                base(); t[LEFT_FOOT] = 90 + F(14); t[RIGHT_FOOT] = 90 + F(14);
+                if (hands) { t[LEFT_HAND] = L(35); t[RIGHT_HAND] = R(10); }
+                MoveServos(260, t);
+                base(); t[LEFT_FOOT] = 90 - F(14); t[RIGHT_FOOT] = 90 - F(14);
+                if (hands) { t[LEFT_HAND] = L(10); t[RIGHT_HAND] = R(35); }
+                MoveServos(260, t);
+            }
+            break;
+        case 7:  // sorpresa: braccia su di scatto
+            base(); if (hands) { t[LEFT_HAND] = L(110); t[RIGHT_HAND] = R(110); }
+            t[LEFT_FOOT] = 90 + F(10); t[RIGHT_FOOT] = 90 - F(10);
+            MoveServos(180, t); vTaskDelay(pdMS_TO_TICKS(400));
+            break;
+        case 8:  // timido: braccia raccolte, piccola rotazione
+            base(); if (hands) { t[LEFT_HAND] = L(45); t[RIGHT_HAND] = R(45); }
+            t[LEFT_LEG] = 90 + F(10); t[RIGHT_LEG] = 90 + F(10);
+            MoveServos(450, t); vTaskDelay(pdMS_TO_TICKS(500));
+            break;
+        case 9:  // triste: si affloscia lentamente
+            base(); if (hands) { t[LEFT_HAND] = LH0 - (int)(15 * k); t[RIGHT_HAND] = RH0 + (int)(15 * k); }
+            t[LEFT_FOOT] = 90 - F(8); t[RIGHT_FOOT] = 90 + F(8);
+            MoveServos(900, t); vTaskDelay(pdMS_TO_TICKS(600));
+            break;
+        case 10:  // pensieroso: mano destra "al mento"
+            base(); if (hands) t[RIGHT_HAND] = R(85);
+            t[LEFT_FOOT] = 90 + F(6); t[RIGHT_FOOT] = 90 + F(6);
+            MoveServos(400, t); vTaskDelay(pdMS_TO_TICKS(800));
+            break;
+        case 11:  // agitato: piccoli scatti dei piedi
+            for (int i = 0; i < 3; i++) {
+                base(); t[LEFT_FOOT] = 90 + F(10); MoveServos(110, t);
+                base(); t[RIGHT_FOOT] = 90 - F(10); MoveServos(110, t);
+            }
+            break;
+        case 12:  // alza le spalle
+        default:
+            base(); if (hands) { t[LEFT_HAND] = L(40); t[RIGHT_HAND] = R(40); }
+            MoveServos(220, t); vTaskDelay(pdMS_TO_TICKS(200));
+            break;
     }
 }

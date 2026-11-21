@@ -1,6 +1,7 @@
 #pragma once
 
 #include "display/lcd_display.h"
+#include <string>
 
 /**
  * @brief Otto机器人GIF表情显示类
@@ -17,8 +18,15 @@ class OttoEmojiDisplay : public SpiLcdDisplay {
     virtual void SetStatus(const char* status) override;
     virtual void SetPreviewImage(std::unique_ptr<LvglImage> image) override;
     virtual void SetupUI() override;
+    virtual void SetChatMessage(const char* role, const char* content) override;
+    virtual void SetEmotion(const char* emotion) override;
 
    private:
     void InitializeOttoEmojis();
+    // Ugo: stato conversazione per espressioni e gesti
+    bool ugo_speaking_ = false;
+    bool ugo_thinking_ = false;
+    std::string ugo_emotion_ = "neutral";
+    int ugo_sentences_ = 0;
     void SetupPreviewImage();
 };
