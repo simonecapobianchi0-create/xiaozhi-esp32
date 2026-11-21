@@ -1,0 +1,43 @@
+name: Ugo firmware (otto-robot)
+
+on:
+  push:
+    branches:
+      - 'ugo/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build otto-robot (Ugo)
+    runs-on: ubuntu-latest
+    container:
+      image: espressif/idf:release-v5.5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build
+        shell: bash
+        run: |
+          source $IDF_PATH/export.sh
+          python scripts/release.py otto-robot --name otto-robot
+          echo "== file prodotti =="
+          ls -la build/*.bin build/flasher_args.json
+          echo "== offset di flash =="
+          cat build/flasher_args.json
+          grep -E "CUSTOM_WAKE_WORD|SR_MN_|USE_.*WAKE" build/sdkconfig || true
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: ugo-otto-firmware-${{ github.sha }}
+          path: |
+            build/merged-binary.bin
+            build/xiaozhi.bin
+            build/generated_assets.bin
+            build/flasher_args.json
+            build/ota_data_initial.bin
+          if-no-files-found: warn
