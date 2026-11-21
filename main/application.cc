@@ -433,10 +433,9 @@ void Application::CheckNewVersion() {
         retry_delay = 10; // Reset retry delay
 
         if (ota_->HasNewVersion()) {
-            if (UpgradeFirmware(ota_->GetFirmwareUrl(), ota_->GetFirmwareVersion())) {
-                return; // This line will never be reached after reboot
-            }
-            // If upgrade failed, continue to normal operation
+            // Ugo: firmware personalizzato, l'aggiornamento automatico dal server è disattivato
+            // (altrimenti sovrascriverebbe queste modifiche). Attivazione e configurazione restano attive.
+            ESP_LOGW(TAG, "Ugo: aggiornamento firmware %s disponibile ma ignorato", ota_->GetFirmwareVersion().c_str());
         }
 
         // No new version, mark the current version as valid
