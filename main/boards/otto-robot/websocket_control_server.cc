@@ -87,6 +87,9 @@ esp_err_t WebSocketControlServer::ws_handler(httpd_req_t *req) {
 bool WebSocketControlServer::Start(int port) {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.server_port = port;
+    // Ugo: porta di controllo diversa dal default (32768), altrimenti il portale
+    // di configurazione Wi-Fi fallisce httpd_start con EADDRINUSE e va in abort()
+    config.ctrl_port = ESP_HTTPD_DEF_CTRL_PORT + 1;
     config.max_open_sockets = 7;
 
     httpd_uri_t ws_uri = {
