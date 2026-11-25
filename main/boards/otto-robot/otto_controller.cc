@@ -17,6 +17,7 @@
 #include <memory>
 #include <esp_rom_gpio.h>
 #include <soc/spi_periph.h>
+#include <driver/spi_common.h>
 #include "config.h"
 #include "mcp_server.h"
 #include "otto_movements.h"
