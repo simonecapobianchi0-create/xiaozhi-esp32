@@ -40,8 +40,27 @@ void Otto::Init(int left_leg, int right_leg, int left_foot, int right_foot, int 
     // 检查是否有手部舵机
     has_hands_ = (left_hand != -1 && right_hand != -1);
 
+    // Ugo: sulla scheda senza fotocamera GPIO 12 è anche il CS dello schermo.
+    // Il braccio destro resta scollegato e si attiva solo durante le azioni richieste.
+    right_hand_pin_ = right_hand;
+    if (right_hand == 12) {
+        right_hand_shared_ = true;
+        servo_pins_[RIGHT_HAND] = -1;
+    }
+
     AttachServos();
     is_otto_resting_ = false;
+}
+
+void Otto::SetRightHandActive(bool on) {
+    if (!right_hand_shared_) return;
+    if (on) {
+        servo_pins_[RIGHT_HAND] = right_hand_pin_;
+        servo_[RIGHT_HAND].Attach(right_hand_pin_);
+    } else {
+        servo_[RIGHT_HAND].Detach();
+        servo_pins_[RIGHT_HAND] = -1;
+    }
 }
 
 ///////////////////////////////////////////////////////////////////

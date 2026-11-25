@@ -98,7 +98,13 @@ public:
     void EnableServoLimit(int speed_limit_degree_per_sec = SERVO_LIMIT_DEFAULT);
     void DisableServoLimit();
 
+    // Ugo: braccio destro condiviso con il CS dello schermo (GPIO 12)
+    bool RightHandShared() const { return right_hand_shared_; }
+    void SetRightHandActive(bool on);
+
 private:
+    int right_hand_pin_ = -1;
+    bool right_hand_shared_ = false;
     Oscillator servo_[SERVO_COUNT];
 
     int servo_pins_[SERVO_COUNT];

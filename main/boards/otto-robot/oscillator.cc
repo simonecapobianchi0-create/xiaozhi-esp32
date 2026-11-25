@@ -77,9 +77,14 @@ void Oscillator::Attach(int pin, bool rev) {
                                       .clk_cfg = LEDC_AUTO_CLK};
     ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
 
+    // Ugo: riusa sempre lo stesso canale LEDC quando un servo viene ricollegato,
+    // altrimenti a ogni Attach ruberebbe il canale di un altro servo.
     static int last_channel = 0;
-    last_channel = (last_channel + 1) % 7 + 1;
-    ledc_channel_ = (ledc_channel_t)last_channel;
+    if (!channel_assigned_) {
+        last_channel = (last_channel + 1) % 7 + 1;
+        ledc_channel_ = (ledc_channel_t)last_channel;
+        channel_assigned_ = true;
+    }
 
     ledc_channel_config_t ledc_channel = {.gpio_num = pin_,
                                           .speed_mode = LEDC_LOW_SPEED_MODE,

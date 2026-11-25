@@ -13,6 +13,10 @@
 
 #include "application.h"
 #include "board.h"
+#include "display.h"
+#include <memory>
+#include <esp_rom_gpio.h>
+#include <soc/spi_periph.h>
 #include "config.h"
 #include "mcp_server.h"
 #include "otto_movements.h"
@@ -82,6 +86,16 @@ private:
                 ESP_LOGI(TAG, "执行动作: %d", params.action_type);
                 PowerManager::PauseBatteryUpdate();  // 动作开始时暂停电量更新
                 controller->is_action_in_progress_ = true;
+                // Ugo: il braccio destro (GPIO 12) condivide il pin con il CS dello schermo.
+                // Per le azioni richieste (non i gesti mentre parla) lo schermo va in pausa,
+                // il braccio si muove, poi il pin torna all'SPI dello schermo.
+                std::unique_ptr<DisplayLockGuard> ugo_display_pause;
+                bool ugo_right_hand = controller->otto_.RightHandShared() && params.action_type != ACTION_GESTURE;
+                if (ugo_right_hand) {
+                    ugo_display_pause.reset(new DisplayLockGuard(Board::GetInstance().GetDisplay()));
+                    vTaskDelay(pdMS_TO_TICKS(50));  // lascia finire l'ultimo trasferimento SPI
+                    controller->otto_.SetRightHandActive(true);
+                }
                 if (params.action_type == ACTION_SERVO_SEQUENCE) {
                     // 执行舵机序列（自编程）- 仅支持短键名格式
                     cJSON* json = cJSON_Parse(params.servo_sequence_json);
@@ -416,6 +430,12 @@ private:
                             controller->otto_.Home(params.action_type != ACTION_HANDS_UP);
                         }
                     }
+                }
+                if (ugo_right_hand) {
+                    vTaskDelay(pdMS_TO_TICKS(300));  // il servo completa l'ultimo impulso
+                    controller->otto_.SetRightHandActive(false);
+                    esp_rom_gpio_connect_out_signal(GPIO_NUM_12, spi_periph_signal[SPI3_HOST].spics_out[0], false, false);
+                    ugo_display_pause.reset();
                 }
                 controller->is_action_in_progress_ = false;
                 PowerManager::ResumeBatteryUpdate();  // 动作结束时恢复电量更新

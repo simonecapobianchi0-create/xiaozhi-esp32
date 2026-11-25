@@ -85,6 +85,7 @@ private:
     long previous_servo_command_millis_;
 
     ledc_channel_t ledc_channel_;
+    bool channel_assigned_ = false;  // Ugo
     ledc_mode_t ledc_speed_mode_;
 };
 
