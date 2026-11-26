@@ -308,11 +308,13 @@ private:
 
     void InitializeAudioCodec() {
         if (hw_config_.audio_use_simplex) {
-            audio_codec_ = new NoAudioCodecSimplex(
+            // Ugo: il microfono della scheda senza fotocamera è PDM (CLK=GPIO5, DATA=GPIO6),
+            // non I2S standard: con NoAudioCodecSimplex legge solo silenzio (robot "sordo").
+            audio_codec_ = new NoAudioCodecSimplexPdm(
                 hw_config_.audio_input_sample_rate, hw_config_.audio_output_sample_rate,
                 hw_config_.audio_i2s_spk_gpio_bclk, hw_config_.audio_i2s_spk_gpio_lrck,
                 hw_config_.audio_i2s_spk_gpio_dout, hw_config_.audio_i2s_mic_gpio_sck,
-                hw_config_.audio_i2s_mic_gpio_ws, hw_config_.audio_i2s_mic_gpio_din);
+                hw_config_.audio_i2s_mic_gpio_din);
         } else {
             audio_codec_ = new NoAudioCodecDuplex(
                 hw_config_.audio_input_sample_rate, hw_config_.audio_output_sample_rate,

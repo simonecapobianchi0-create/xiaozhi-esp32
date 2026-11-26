@@ -374,6 +374,13 @@ int NoAudioCodecSimplexPdm::Read(int16_t* dest, int samples) {
     }
 
     samples = bytes_read / sizeof(int16_t);
+#ifdef CONFIG_BOARD_TYPE_OTTO_ROBOT
+    // Ugo: microfono +6 dB (x2) con limitazione
+    for (int i = 0; i < samples; i++) {
+        int32_t v = int32_t(dest[i]) * 2;
+        dest[i] = (v > INT16_MAX) ? INT16_MAX : (v < -INT16_MAX) ? -INT16_MAX : (int16_t)v;
+    }
+#endif
     if (input_gain_ > 0) {
         int gain_factor = (int)input_gain_;
         for (int i = 0; i < samples; i++) {
